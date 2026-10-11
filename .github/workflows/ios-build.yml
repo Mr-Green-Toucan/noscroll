@@ -1,0 +1,61 @@
+
+name: Build NoScroll iOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm@9
+
+      - name: Install engine dependencies
+        run: pnpm install --dir engine
+
+      - name: Test engine
+        run: pnpm --dir engine test
+
+      - name: Sync engine into iOS app
+        run: node tools/sync-engine.mjs
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build unsigned iOS app
+        run: |
+          xcodebuild \
+            -project ios/NoScroll.xcodeproj \
+            -scheme NoScroll \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/NoScroll.app Payload/
+          zip -qr NoScroll-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoScroll-iOS-unsigned
+          path: NoScroll-unsigned.ipa
+          retention-days: 7
